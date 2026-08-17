@@ -1,5 +1,8 @@
 const { auth, db } = require('./firebase');
 
+const MEMBER_CACHE_MS = 2 * 60 * 1000;
+const _memberCache = new Map();
+
 // Gates a /tenants/:tenantId/... route behind a Firebase ID token, and
 // checks the caller is actually a member (or admin) of that tenant — without
 // this, anyone who guessed a tenantId could connect a WhatsApp number or
@@ -20,11 +23,17 @@ function requireTenantRole(role) {
     }
 
     const tenantId = req.params.tenantId;
-    const memberSnap = await db.collection('tenants').doc(tenantId).collection('members').doc(uid).get();
-    if (!memberSnap.exists) {
-      return res.status(403).json({ error: 'Not a member of this business.' });
+    const cacheKey = `${tenantId}:${uid}`;
+    let member = _memberCache.get(cacheKey);
+    if (!member || Date.now() - member.at > MEMBER_CACHE_MS) {
+      const memberSnap = await db.collection('tenants').doc(tenantId).collection('members').doc(uid).get();
+      if (!memberSnap.exists) {
+        return res.status(403).json({ error: 'Not a member of this business.' });
+      }
+      member = { at: Date.now(), role: memberSnap.data().role };
+      _memberCache.set(cacheKey, member);
     }
-    if (role === 'admin' && memberSnap.data().role !== 'admin') {
+    if (role === 'admin' && member.role !== 'admin') {
       return res.status(403).json({ error: 'Admin role required.' });
     }
 

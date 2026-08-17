@@ -11,4 +11,10 @@ initializeApp({
   credential: cert(require(serviceAccountPath)),
 });
 
-module.exports = { db: getFirestore(), auth: getAuth() };
+const db = getFirestore();
+db.settings({ ignoreUndefinedProperties: true });
+
+module.exports = {
+  db,
+  auth: getAuth(),
+};
